@@ -1,10 +1,10 @@
-#include <main.hpp>
+#include <civitai_downloader.hpp>
 
 #define INPUT_BUFFER_SIZE 1024
 
 int main()
 {
-	fprintf(stdout, "CivitAI model downloader V0.1.2\n\n");
+	fprintf(stdout, "CivitAI model downloader V0.2.2\n\n");
 	CivitaiDownloader CIDownloader = CivitaiDownloader();
 
 	// Some test links

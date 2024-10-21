@@ -5,11 +5,13 @@
 #include <nlohmann\json.hpp>
 #include <vector>
 #include <regex>
+#include <codecvt>
 #include <config4cpp\Configuration.h>
 #include <helper_functions.hpp>
-
+#include <map>
 #include <Windows.h>
 #include <fstream>
+#include <filesystem>
 
 #define BUFFER_SIZE_BYTES 8192
 

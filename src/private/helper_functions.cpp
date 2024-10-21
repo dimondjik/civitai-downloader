@@ -50,6 +50,16 @@ void helpers::removeEntriesWithCharacters(std::vector<std::string>& source, std:
 	};
 };
 
+void helpers::replaceCharactersInEntries(std::vector<std::string>& source, std::string characters) {
+	std::vector<std::string> sourceBuf = source;
+
+	for (int i = 0; i < source.size(); i++) {
+		for (char c : "\\/:*?\"<>|") {
+			std::replace(source[i].begin(), source[i].end(), c, '#');
+		};
+	};
+};
+
 void helpers::generateCRC32(std::string path, std::string &checksum) {
 
 	using namespace CryptoPP;

@@ -116,11 +116,15 @@ int CivitaiDownloader::getModelInfo() {
 	char errbuf[CURL_ERROR_SIZE];
 	std::string data;
 
+	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+
 	headers = curl_slist_append(headers, "Content-Type: application/json");
 	headers = curl_slist_append(headers, std::string("Authorization: Bearer ").append(this->token).c_str());
 
+
 	curl = curl_easy_init();
 
+	// GETTING MODEL INFO
 	curl_easy_setopt(curl, CURLOPT_URL, std::string("https://civitai.com/api/v1/models/").append(std::to_string(this->idx[0])).c_str());
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
@@ -128,112 +132,11 @@ int CivitaiDownloader::getModelInfo() {
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &data);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
 
+	// TODO: Why is it here?
 	errbuf[0] = 0;
 	res = curl_easy_perform(curl);
 
-	curl_easy_cleanup(curl);
-
-	if (CURLE_OK == res) {
-		nlohmann::json dataJSON = nlohmann::json::parse(data);
-
-		// fprintf(stdout, "%s", dataJSON.dump().c_str());
-		// return 1;
-
-		fprintf(stdout, "Model name: %s\n", dataJSON["name"].get<std::string>().c_str());
-
-		this->ds.modelType = this->modelTypeTranslation[dataJSON["type"].get<std::string>()];
-
-		fprintf(stdout, "Model type: %s\n", dataJSON["type"].get<std::string>().c_str());
-
-		// Model version index
-		int vi = 0;
-
-		// Getting model version
-		if (this->idx[1] == 0) {
-			fprintf(stdout, "No version got from link, will use the first version found\n");
-			for (vi; vi < dataJSON["modelVersions"].size(); vi++) {
-				if (dataJSON["modelVersions"][vi]["index"].get<int>() == 0) {
-					this->idx[1] = dataJSON["modelVersions"][vi]["id"].get<int>();
-					break;
-				};
-			};
-		}
-		else {
-			for (vi; vi < dataJSON["modelVersions"].size(); vi++) {
-				if (dataJSON["modelVersions"][vi]["id"].get<int>() == this->idx[1]) {
-					break;
-				};
-			};
-		};
-		fprintf(stdout, "Model version: %s\n", dataJSON["modelVersions"][vi]["name"].get<std::string>().c_str());
-
-		// Getting trigger words if that's a LoRA (cleaning up if needed)
-		if (this->ds.modelType == LORA) {
-			if (dataJSON["modelVersions"][vi]["trainedWords"].size() > 0) {
-				this->ds.triggerWords = dataJSON["modelVersions"][vi]["trainedWords"].get<std::vector<std::string>>();
-
-				fprintf(stdout, "Cleaning up trigger words\n");
-
-				if (this->ds.triggerWords.size() == 1) {
-					fprintf(stdout, "Single trigger word found, trying to split by commas...\n");
-
-					helpers::splitByDelimeter(this->ds.triggerWords[0], this->ds.triggerWords, ',');
-				};
-
-				fprintf(stdout, "Removing excess whitespaces...\n");
-
-				for (int j = 0; j < this->ds.triggerWords.size(); j++) {
-					helpers::strip(this->ds.triggerWords[j]);
-				};
-
-				fprintf(stdout, "Removing trigger words with disallowed symbols...\n");
-
-				helpers::removeEntriesWithCharacters(this->ds.triggerWords, "\\/:*?\"<>|");
-
-				fprintf(stdout, "Trigger words: ");
-				for (int i = 0; i < this->ds.triggerWords.size(); i++) {
-					fprintf(stdout, "%s%s", this->ds.triggerWords[i].c_str(), ((i != this->ds.triggerWords.size() - 1) ? ", " : ""));
-				};
-				fprintf(stdout, "\n");
-			}
-			else {
-				fprintf(stdout, "No trigger words found\n");
-			};
-		}
-		else if (this->ds.modelType == SD) {
-			fprintf(stdout, "Not using trigger words, since it's a Checkpoint\n");
-		}
-		else {
-			fprintf(stderr, "Unsupported model type!\n");
-			return 1;
-		};
-
-		// File index
-		int fi = 0;
-
-		for (fi; fi < dataJSON["modelVersions"][vi]["files"].size(); fi++)
-		{
-			if (dataJSON["modelVersions"][vi]["downloadUrl"].get<std::string>() == dataJSON["modelVersions"][vi]["files"][fi]["downloadUrl"]) {
-				break;
-			};
-		};
-
-		this->downloadURL = dataJSON["modelVersions"][vi]["files"][fi]["downloadUrl"].get<std::string>();
-
-		fprintf(stdout, "URL: %s\n", downloadURL.c_str());
-
-		this->remoteChecksum = dataJSON["modelVersions"][vi]["files"][fi]["hashes"]["CRC32"].get<std::string>();
-
-		// fprintf(stdout, "Remote CRC32: %s\n", remoteChecksum.c_str());
-
-		// Does every model have images?
-		this->imageURL = dataJSON["modelVersions"][vi]["images"][0]["url"].get<std::string>();
-
-		fprintf(stdout, "First found image URL: %s\n", this->imageURL.c_str());
-
-		return 0;
-	}
-	else {
+	if (CURLE_OK != res) {
 		fprintf(stderr, "CURL error getting model info!\n");
 
 		size_t errbufLen = strlen(errbuf);
@@ -248,21 +151,275 @@ int CivitaiDownloader::getModelInfo() {
 
 		return 1;
 	};
-};
 
-int CivitaiDownloader::downloadModel() {
+	nlohmann::json dataJSON = nlohmann::json::parse(data);
+
+	// fprintf(stdout, "%s", dataJSON.dump().c_str());
+	// return 1;
+
+	fprintf(stdout, "Model name: %s\n", dataJSON["name"].get<std::string>().c_str());
+
+	this->ds.modelType = this->modelTypeTranslation[dataJSON["type"].get<std::string>()];
+
+	fprintf(stdout, "Model type: %s\n", dataJSON["type"].get<std::string>().c_str());
+
+	// Model version index
+	int vi = 0;
+
+	// Getting model version
+	if (this->idx[1] == 0) {
+		fprintf(stdout, "No version got from link, will use the first version found\n");
+		for (vi; vi < dataJSON["modelVersions"].size(); vi++) {
+			if (dataJSON["modelVersions"][vi]["index"].get<int>() == 0) {
+				this->idx[1] = dataJSON["modelVersions"][vi]["id"].get<int>();
+				break;
+			};
+		};
+	}
+	else {
+		for (vi; vi < dataJSON["modelVersions"].size(); vi++) {
+			if (dataJSON["modelVersions"][vi]["id"].get<int>() == this->idx[1]) {
+				break;
+			};
+		};
+	};
+	fprintf(stdout, "Model version: %s\n", dataJSON["modelVersions"][vi]["name"].get<std::string>().c_str());
+
+	std::wstring wstr_path;
+	std::smatch sm;
+
 	switch (this->ds.modelType) {
+		// Getting trigger words if that's a LoRA (cleaning up if needed)
 	case LORA:
 		this->ds.path = loraFolder;
+
+		// Subfolder by checkpoint base model
+		this->ds.path += dataJSON["modelVersions"][vi]["baseModel"].get<std::string>() + "\\";
+
+		// Create folder if not exists
+		wstr_path = converter.from_bytes(this->ds.path);
+
+		if (
+			not
+			(
+				CreateDirectory(wstr_path.c_str(), NULL) ||
+				ERROR_ALREADY_EXISTS == GetLastError()
+				)
+			)
+		{
+			fprintf(stderr, "Can't create new folder!\n");
+			return 1;
+		};
+
+		// TRIGGER WORDS
+		if (dataJSON["modelVersions"][vi]["trainedWords"].size() > 0) {
+			this->ds.triggerWords = dataJSON["modelVersions"][vi]["trainedWords"].get<std::vector<std::string>>();
+
+			fprintf(stdout, "Cleaning up trigger words\n");
+
+			if (this->ds.triggerWords.size() == 1) {
+				fprintf(stdout, "Single trigger word found, trying to split by commas...\n");
+
+				helpers::splitByDelimeter(this->ds.triggerWords[0], this->ds.triggerWords, ',');
+			};
+
+			fprintf(stdout, "Removing excess whitespaces...\n");
+
+			for (int j = 0; j < this->ds.triggerWords.size(); j++) {
+				helpers::strip(this->ds.triggerWords[j]);
+			};
+
+			fprintf(stdout, "Removing trigger words with disallowed symbols...\n");
+
+			// helpers::removeEntriesWithCharacters(this->ds.triggerWords, "\\/:*?\"<>|");
+			helpers::replaceCharactersInEntries(this->ds.triggerWords, "\\/:*?\"<>|");
+
+			fprintf(stdout, "Trigger words: ");
+			for (int i = 0; i < this->ds.triggerWords.size(); i++) {
+				fprintf(stdout, "%s%s", this->ds.triggerWords[i].c_str(), ((i != this->ds.triggerWords.size() - 1) ? ", " : ""));
+			};
+			fprintf(stdout, "\n");
+		}
+		else {
+			fprintf(stdout, "No trigger words found\n");
+		};
+
+		// GETTING MAIN TAG
+		// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+		headers = NULL;
+		headers = curl_slist_append(headers, std::string("Accept: ").append("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8").c_str());
+		headers = curl_slist_append(headers, std::string("User Agent: ").append("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0").c_str());
+		headers = curl_slist_append(headers, std::string("Authorization: Bearer ").append(this->token).c_str());
+
+		data.clear();
+
+		curl_easy_setopt(curl, CURLOPT_URL, std::string("https://civitai.com/models/").append(std::to_string(this->idx[0])).c_str());
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+		res = curl_easy_perform(curl);
+
+		if (CURLE_OK != res) {
+			fprintf(stderr, "CURL error getting model HTML page!\n");
+
+			size_t errbufLen = strlen(errbuf);
+
+			if (errbufLen) {
+				fprintf(stderr, "%s%s", errbuf,
+					((errbuf[errbufLen - 1] != '\n') ? "\n" : ""));
+			}
+			else {
+				fprintf(stderr, "%s\n", curl_easy_strerror(res));
+			};
+
+			return 1;
+		};
+
+		std::regex_search(data, sm, std::regex("mantine-Badge-inner.*?>([a-zA-Z]+)<"));
+
+		if (sm.size() == 2) {
+			fprintf(stdout, "Model main tag: %s\n", sm[1].str().c_str());
+			this->ds.path += sm[1].str() + "\\";
+			// Create folder if not exists
+			wstr_path = converter.from_bytes(this->ds.path);
+
+			if (
+				not
+				(
+					CreateDirectory(wstr_path.c_str(), NULL) ||
+					ERROR_ALREADY_EXISTS == GetLastError()
+					)
+				)
+			{
+				fprintf(stderr, "Can't create new folder!\n");
+				return 1;
+			};
+		}
+		else {
+			fprintf(stdout, "%s\n", "Model main tag not found, placing in root folder...");
+		};
+
+		// fprintf(stdout, "%s", data.c_str());
+		// return 1;
+		// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 		break;
 	case SD:
 		this->ds.path = sdFolder;
+
+		// Subfolder by checkpoint base model
+		this->ds.path += dataJSON["modelVersions"][vi]["baseModel"].get<std::string>() + "\\";
+
+		// Create folder if not exists
+		wstr_path = converter.from_bytes(this->ds.path);
+
+		if (
+			not
+			(
+				CreateDirectory(wstr_path.c_str(), NULL) ||
+				ERROR_ALREADY_EXISTS == GetLastError()
+				)
+			)
+		{
+			fprintf(stderr, "Can't create new folder!\n");
+			return 1;
+		};
+
+		fprintf(stdout, "Not using trigger words, since it's a Checkpoint\n");
 		break;
 	default:
-		fprintf(stderr, "This error should not have happened :(\n");
+		fprintf(stderr, "Unsupported model type!\n");
 		return 1;
 	};
 
+
+	// File index
+	int fi = 0;
+
+	for (fi; fi < dataJSON["modelVersions"][vi]["files"].size(); fi++)
+	{
+		if (dataJSON["modelVersions"][vi]["downloadUrl"].get<std::string>() == dataJSON["modelVersions"][vi]["files"][fi]["downloadUrl"]) {
+			break;
+		};
+	};
+
+	this->downloadURL = dataJSON["modelVersions"][vi]["files"][fi]["downloadUrl"].get<std::string>();
+
+	fprintf(stdout, "URL: %s\n", downloadURL.c_str());
+
+	this->remoteChecksum = dataJSON["modelVersions"][vi]["files"][fi]["hashes"]["CRC32"].get<std::string>();
+
+	// fprintf(stdout, "Remote CRC32: %s\n", remoteChecksum.c_str());
+
+	// GETTING MODEL VERSION IMAGE
+	// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+	// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+	// Does every model have images?
+	// Alright if CivitAI doesn't want to sort as I like, I'll do it myself then
+
+	std::string query_string = "https://civitai.com/api/v1/images?modelVersionId=";
+	query_string += std::to_string(this->idx[1]);
+	query_string += "&nsfw=X&username=";
+	query_string += dataJSON["creator"]["username"].get<std::string>();
+	std::replace(query_string.begin(), query_string.end(), ' ', '+');
+
+	data.clear();
+
+	curl_easy_setopt(curl, CURLOPT_URL, query_string.c_str());
+
+	errbuf[0] = 0;
+	res = curl_easy_perform(curl);
+
+	if (CURLE_OK != res) {
+		fprintf(stderr, "CURL error getting model sample images!\n");
+
+		size_t errbufLen = strlen(errbuf);
+
+		if (errbufLen) {
+			fprintf(stderr, "%s%s", errbuf,
+				((errbuf[errbufLen - 1] != '\n') ? "\n" : ""));
+		}
+		else {
+			fprintf(stderr, "%s\n", curl_easy_strerror(res));
+		};
+
+		return 1;
+	};
+
+	curl_easy_cleanup(curl);
+
+	dataJSON = nlohmann::json::parse(data);
+
+	// fprintf(stdout, "%s", dataJSON.dump().c_str());
+	// return 1;
+
+	std::map<int, std::string> reactions_to_links;
+
+	for (int ii = 0; ii < dataJSON["items"].size(); ii++)
+	{
+		// Only considering: heartCount, likeCount
+		int reactions = dataJSON["items"][ii]["stats"]["heartCount"].get<int>() + dataJSON["items"][ii]["stats"]["likeCount"].get<int>();
+		reactions_to_links.insert({ reactions, dataJSON["items"][ii]["url"].get<std::string>() });
+	};
+
+	/*for (std::pair<int, std::string> item : reactions_to_links)
+	{
+		fprintf(stderr, "%d : %s\n", item.first, item.second.c_str());
+	};
+	return 1;*/
+
+	this->imageURL = std::prev(reactions_to_links.end())->second;
+
+	fprintf(stdout, "Most reactions image URL: %s\n", this->imageURL.c_str());
+
+	// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+	// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+	return 0;
+};
+
+int CivitaiDownloader::downloadModel() {
 	CURL* curl;
 	CURLcode res;
 	curl_slist* headers = nullptr;

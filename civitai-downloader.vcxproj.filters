@@ -21,9 +21,6 @@
     <ClInclude Include="src\public\helper_functions.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\public\main.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\private\civitai_downloader.cpp">

@@ -20,6 +20,7 @@ namespace helpers {
 	void strip(std::string& source);
 
 	void removeEntriesWithCharacters(std::vector<std::string>& source, std::string characters);
+	void replaceCharactersInEntries(std::vector<std::string>& source, std::string characters);
 
 	void generateCRC32(std::string path, std::string& checksum);
 };

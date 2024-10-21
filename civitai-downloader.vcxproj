@@ -21,7 +21,6 @@
   <ItemGroup>
     <ClInclude Include="src\public\civitai_downloader.hpp" />
     <ClInclude Include="src\public\helper_functions.hpp" />
-    <ClInclude Include="src\public\main.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\private\civitai_downloader.cpp" />
@@ -121,6 +120,7 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>include;src\public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <LanguageStandard>stdcpp14</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
